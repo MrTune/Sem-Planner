@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Semester Planner – Calendar</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Shared styles -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Top navigation -->
+  <header class="top-bar">
+    <h1>Semester Planner</h1>
+    <nav class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="calendar.html" class="active">Calendar</a>
+    </nav>
+  </header>
+
+  <!-- Calendar container -->
+  <main class="calendar-container">
+
+    <!-- Calendar header -->
+    <div class="calendar-header">
+      <button id="prevMonthBtn" aria-label="Previous Month">←</button>
+      <h2 id="calendarMonthLabel">January 2026</h2>
+      <button id="nextMonthBtn" aria-label="Next Month">→</button>
+    </div>
+
+    <!-- Days of week -->
+    <div class="calendar-weekdays">
+      <div>Sun</div>
+      <div>Mon</div>
+      <div>Tue</div>
+      <div>Wed</div>
+      <div>Thu</div>
+      <div>Fri</div>
+      <div>Sat</div>
+    </div>
+
+    <!-- Calendar grid -->
+    <div id="calendarGrid" class="calendar-grid">
+      <!-- Days will be rendered by script.js -->
+    </div>
+
+  </main>
+
+  <!-- Shared logic -->
+  <script src="script.js"></script>
+
+  <!-- Calendar bootstrap -->
+  <script>
+    let calendarYear = 2026;
+    let calendarMonth = 0;
+
+    function updateCalendar() {
+      if (typeof renderCalendar === "function") {
+        renderCalendar(calendarYear, calendarMonth);
+        const monthNames = [
+          "January", "February", "March", "April", "May", "June",
+          "July", "August", "September", "October", "November", "December"
+        ];
+        document.getElementById("calendarMonthLabel").textContent =
+          monthNames[calendarMonth] + " " + calendarYear;
+      }
+    }
+
+    document.getElementById("prevMonthBtn").addEventListener("click", () => {
+      calendarMonth--;
+      if (calendarMonth < 0) {
+        calendarMonth = 11;
+        calendarYear--;
+      }
+      updateCalendar();
+    });
+
+    document.getElementById("nextMonthBtn").addEventListener("click", () => {
+      calendarMonth++;
+      if (calendarMonth > 11) {
+        calendarMonth = 0;
+        calendarYear++;
+      }
+      updateCalendar();
+    });
+
+    updateCalendar();
+  </script>
+
+</body>
+</html>
