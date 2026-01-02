@@ -1,318 +1,295 @@
-// Data Structure
-const DEFAULT_COURSES = Array.from({ length: 7 }, (_, i) => ({
-    id: `course_${i + 1}`,
-    name: `Course ${i + 1}: Subject Name`,
-    totalMarks: 0,
-    components: []
-}));
+/**********************************************************
+ * SEMESTER PLANNER — SINGLE SOURCE OF TRUTH
+ **********************************************************/
 
-// Storage Helpers
-const Storage = {
-    get: () => {
-        const data = localStorage.getItem('semester_planner_data');
-        if (!data) return DEFAULT_COURSES;
-        const parsed = JSON.parse(data);
-        // Ensure totalMarks is calculated if components were added/modified
-        return parsed.map(c => ({
-            ...c,
-            totalMarks: c.components.reduce((sum, comp) => sum + (Number(comp.max) || 0), 0)
-        }));
-    },
-    save: (data) => {
-        localStorage.setItem('semester_planner_data', JSON.stringify(data));
-    }
-};
+const STORAGE_KEY = "semesterPlannerData";
 
-// Utils
-function calculateCourseStats(course) {
-    let obtained = 0;
-    course.components.forEach(c => {
-        if (c.obtained !== null && c.obtained !== "") {
-            obtained += Number(c.obtained);
-        }
-    });
-    
-    const percentage = course.totalMarks > 0 ? (obtained / course.totalMarks) * 100 : 0;
-
-    // Timeline-aware metrics
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    let currentObtained = 0;
-    let currentMax = 0;
-    let finishedCount = 0;
-    
-    course.components.forEach(comp => {
-        const compDate = new Date(comp.date);
-        if (compDate < today) {
-            finishedCount++;
-            if (comp.obtained !== null && comp.obtained !== "") {
-                currentObtained += Number(comp.obtained);
-            }
-            currentMax += Number(comp.max) || 0;
-        }
-    });
-    
-    const currentPercentage = currentMax > 0 ? ((currentObtained / currentMax) * 100).toFixed(1) : "N/A";
-
-    return { 
-        obtained, 
-        percentage: percentage.toFixed(1),
-        currentObtained,
-        currentMax,
-        currentPercentage,
-        hasFinished: finishedCount > 0
-    };
+/**********************************************************
+ * DATA INITIALIZATION
+ **********************************************************/
+function initData() {
+  if (!localStorage.getItem(STORAGE_KEY)) {
+    const courses = Array.from({ length: 7 }, (_, i) => ({
+      id: i + 1,
+      name: `Course ${i + 1}: Subject Name`,
+      totalMarks: i % 2 === 0 ? 200 : 300,
+      evaluatives: []
+    }));
+    saveData({ courses });
+  }
 }
 
-// Render Logic
-document.addEventListener('DOMContentLoaded', () => {
-    const path = window.location.pathname;
+function loadData() {
+  return JSON.parse(localStorage.getItem(STORAGE_KEY));
+}
 
-    if (path.endsWith('index.html') || path.endsWith('/')) {
-        // Initial render
-        const courses = Storage.get();
-        renderDashboard(courses);
-        renderUpcoming(); // Rebuilds from localStorage
-        
-        // Refresh button listener
-        const refreshBtn = document.getElementById('refresh-upcoming');
-        if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => renderUpcoming());
-        }
+function saveData(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
 
-        // Listen for storage changes from other tabs
-        window.addEventListener('storage', (e) => {
-            if (e.key === 'semester_planner_data') {
-                const updatedCourses = JSON.parse(e.newValue);
-                renderDashboard(updatedCourses);
-                renderUpcoming();
-            }
-        });
-    } else if (path.endsWith('course.html')) {
-        const courses = Storage.get();
-        renderCoursePage(courses);
-    }
-});
+initData();
 
+/**********************************************************
+ * UTILITIES
+ **********************************************************/
+function todayISO() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function daysBetween(date) {
+  const d1 = new Date(date);
+  const d2 = new Date(todayISO());
+  return Math.ceil((d1 - d2) / (1000 * 60 * 60 * 24));
+}
+
+/**********************************************************
+ * HOME PAGE LOGIC (index.html)
+ **********************************************************/
+function renderHome() {
+  const data = loadData();
+  const container = document.getElementById("coursesContainer");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  data.courses.forEach(course => {
+    const obtained = course.evaluatives.reduce(
+      (s, e) => s + (Number(e.obtained) || 0),
+      0
+    );
+
+    const percent = ((obtained / course.totalMarks) * 100).toFixed(1);
+
+    const card = document.createElement("div");
+    card.className = "course-card";
+    card.innerHTML = `
+      <h3>${course.name}</h3>
+      <div class="progress-bar">
+        <div style="width:${percent}%"></div>
+      </div>
+      <div class="progress-text">${obtained} / ${course.totalMarks}</div>
+    `;
+    card.onclick = () => {
+      window.location.href = `course.html?id=${course.id}`;
+    };
+
+    container.appendChild(card);
+  });
+
+  renderUpcoming();
+}
+
+/**********************************************************
+ * UPCOMING EVALUATIVES
+ **********************************************************/
 function renderUpcoming() {
-    const list = document.getElementById('upcoming-list');
-    if (!list) return;
+  const box = document.getElementById("upcomingList");
+  if (!box) return;
 
-    // Read FRESH data from localStorage
-    const courses = Storage.get();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  const data = loadData();
+  const today = todayISO();
+  const upcoming = [];
 
-    const upcoming = [];
-    courses.forEach(course => {
-        course.components.forEach(comp => {
-            const compDate = new Date(comp.date);
-            if (compDate >= today) {
-                upcoming.push({
-                    ...comp,
-                    courseName: course.name,
-                    daysLeft: Math.ceil((compDate - today) / (1000 * 60 * 60 * 24))
-                });
-            }
-        });
+  data.courses.forEach(course => {
+    course.evaluatives.forEach(ev => {
+      if (ev.date && ev.date >= today) {
+        upcoming.push({ ...ev, course: course.name });
+      }
     });
+  });
 
-    upcoming.sort((a, b) => new Date(a.date) - new Date(b.date));
+  upcoming.sort((a, b) => a.date.localeCompare(b.date));
+  box.innerHTML = "";
 
-    if (upcoming.length === 0) {
-        list.innerHTML = '<div class="no-upcoming">No upcoming evaluatives. All caught up!</div>';
-        return;
-    }
+  if (upcoming.length === 0) {
+    box.innerHTML = `<p class="muted">No upcoming evaluatives</p>`;
+    return;
+  }
 
-    list.innerHTML = upcoming.map(item => {
-        let urgencyClass = 'urgency-green';
-        if (item.daysLeft <= 3) urgencyClass = 'urgency-red';
-        else if (item.daysLeft <= 7) urgencyClass = 'urgency-yellow';
+  upcoming.forEach(ev => {
+    const d = daysBetween(ev.date);
+    const badge =
+      d <= 3 ? "urgent" : d <= 7 ? "soon" : "later";
 
-        const daysText = item.daysLeft === 0 ? 'Today' : `${item.daysLeft} day${item.daysLeft === 1 ? '' : 's'} left`;
-        
-        const dateObj = new Date(item.date);
-        const month = dateObj.toLocaleString('default', { month: 'short' }).toUpperCase();
-        const day = dateObj.getDate();
-
-        return `
-            <div class="eval-card">
-                <div class="calendar-box ${urgencyClass}">
-                    <span class="cal-month">${month}</span>
-                    <span class="cal-day">${day}</span>
-                </div>
-                <div class="eval-details">
-                    <span class="comp-name">${item.name}</span>
-                    <span class="course-name">${item.courseName}</span>
-                    <div class="date-row">
-                        <span class="urgency-badge ${urgencyClass}">${daysText}</span>
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join('');
+    const el = document.createElement("div");
+    el.className = `upcoming-item ${badge}`;
+    el.innerHTML = `
+      <div class="calendar-box">
+        <span>${new Date(ev.date).toLocaleString("en", { month: "short" })}</span>
+        <strong>${new Date(ev.date).getDate()}</strong>
+      </div>
+      <div>
+        <b>${ev.name}</b>
+        <div class="muted">${ev.course}</div>
+        <div class="muted">${d} days left</div>
+      </div>
+    `;
+    box.appendChild(el);
+  });
 }
 
-function renderDashboard(courses) {
-    const grid = document.getElementById('course-grid');
-    if (!grid) return;
+/**********************************************************
+ * COURSE PAGE LOGIC (course.html)
+ **********************************************************/
+function renderCourse() {
+  const params = new URLSearchParams(window.location.search);
+  const id = Number(params.get("id"));
+  if (!id) return;
 
-    grid.innerHTML = courses.map(course => {
-        const stats = calculateCourseStats(course);
-        return `
-            <a href="course.html?id=${course.id}" class="course-card">
-                <h3>${course.name}</h3>
-                <div class="progress-container">
-                    <div class="progress-bar" style="width: ${stats.percentage}%"></div>
-                </div>
-                <span class="progress-text">${stats.obtained} / ${course.totalMarks}</span>
-            </a>
-        `;
-    }).join('');
-}
+  const data = loadData();
+  const course = data.courses.find(c => c.id === id);
+  if (!course) return;
 
-function renderCoursePage(courses) {
-    const params = new URLSearchParams(window.location.search);
-    const courseId = params.get('id');
-    const course = courses.find(c => c.id === courseId);
+  document.getElementById("courseName").value = course.name;
+  document.getElementById("courseName").onchange = e => {
+    course.name = e.target.value;
+    saveData(data);
+  };
 
-    if (!course) {
-        document.body.innerHTML = '<div class="container"><h1>Course not found</h1><a href="index.html">Back</a></div>';
-        return;
-    }
+  document.getElementById("totalMarks").innerText = course.totalMarks;
 
-    // Editable Course Title
-    const header = document.querySelector('header');
-    header.innerHTML = `
-        <a href="index.html" class="back-link">← Back to Dashboard</a>
-        <input type="text" id="course-name-input" class="course-title-input" value="${course.name}">
+  const table = document.getElementById("evalTable");
+  table.innerHTML = "";
+
+  course.evaluatives.forEach((ev, idx) => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td><input value="${ev.name}" /></td>
+      <td><input type="date" value="${ev.date || ""}" /></td>
+      <td><input type="number" value="${ev.max || ""}" /></td>
+      <td><input type="number" value="${ev.obtained || ""}" /></td>
+      <td><button class="delete-btn">×</button></td>
     `;
 
-    document.getElementById('course-name-input').addEventListener('input', (e) => {
-        course.name = e.target.value;
-        Storage.save(courses);
-    });
+    const inputs = row.querySelectorAll("input");
+    inputs[0].onchange = e => ev.name = e.target.value;
+    inputs[1].onchange = e => ev.date = e.target.value;
+    inputs[2].onchange = e => ev.max = Number(e.target.value);
+    inputs[3].onchange = e => ev.obtained = Number(e.target.value);
 
-    // Header Stats
-    const updateStats = () => {
-        const stats = calculateCourseStats(course);
-        document.getElementById('total-marks').textContent = `${stats.obtained} / ${course.totalMarks}`;
-        document.getElementById('percentage').textContent = `${stats.percentage}%`;
-        
-        document.getElementById('current-marks').textContent = stats.hasFinished ? `${stats.currentObtained} / ${stats.currentMax}` : "0 / 0";
-        document.getElementById('current-percentage').textContent = stats.currentPercentage + (stats.hasFinished ? "%" : "");
+    inputs.forEach(i =>
+      i.addEventListener("change", () => {
+        saveData(data);
+        updateCourseStats(course);
+      })
+    );
+
+    row.querySelector("button").onclick = () => {
+      course.evaluatives.splice(idx, 1);
+      saveData(data);
+      renderCourse();
     };
 
-    updateStats();
+    table.appendChild(row);
+  });
 
-    // Components Table
-    const renderTable = () => {
-        const tbody = document.getElementById('components-list');
-        if (course.components.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="no-eval-msg">No evaluatives added yet</td></tr>';
-        } else {
-            tbody.innerHTML = course.components.map((comp, index) => `
-                <tr>
-                    <td>
-                        <input type="text" 
-                               value="${comp.name}"
-                               data-index="${index}"
-                               class="name-input"
-                               placeholder="Component Name">
-                    </td>
-                    <td>
-                        <input type="date" 
-                               value="${comp.date}"
-                               data-index="${index}"
-                               class="date-input">
-                    </td>
-                    <td>
-                        <input type="number" 
-                               min="1" 
-                               value="${comp.max}"
-                               data-index="${index}"
-                               class="max-marks-input">
-                    </td>
-                    <td>
-                        <input type="number" 
-                               min="0" 
-                               max="${comp.max}" 
-                               value="${comp.obtained !== null ? comp.obtained : ''}"
-                               data-index="${index}"
-                               class="marks-input"
-                               placeholder="-">
-                    </td>
-                    <td>
-                        <button class="btn-delete" data-index="${index}">×</button>
-                    </td>
-                </tr>
-            `).join('');
-        }
-    };
-
-    renderTable();
-
-    // Add Component Button
-    const section = document.querySelector('.components-section');
-    const actionBtns = document.createElement('div');
-    actionBtns.className = 'course-actions';
-    actionBtns.innerHTML = `
-        <button id="clear-all-btn" class="btn-clear">Clear All Evaluatives</button>
-        <button id="add-eval-btn" class="btn-refresh">+ Add Evaluative</button>
-    `;
-    section.appendChild(actionBtns);
-
-    document.getElementById('add-eval-btn').addEventListener('click', () => {
-        const todayStr = new Date().toISOString().split('T')[0];
-        course.components.push({
-            name: "New Evaluative",
-            date: todayStr,
-            max: 10,
-            obtained: null
-        });
-        course.totalMarks = course.components.reduce((sum, c) => sum + Number(c.max), 0);
-        Storage.save(courses);
-        renderTable();
-        updateStats();
-    });
-
-    document.getElementById('clear-all-btn').addEventListener('click', () => {
-        course.components = [];
-        course.totalMarks = 0;
-        Storage.save(courses);
-        renderTable();
-        updateStats();
-    });
-
-    // Event Listeners for Inputs and Actions
-    const tbody = document.getElementById('components-list');
-    tbody.addEventListener('click', (e) => {
-        if (e.target.classList.contains('btn-delete')) {
-            const index = parseInt(e.target.dataset.index);
-            course.components.splice(index, 1);
-            course.totalMarks = course.components.reduce((sum, c) => sum + Number(c.max), 0);
-            Storage.save(courses);
-            renderTable();
-            updateStats();
-        }
-    });
-    tbody.addEventListener('input', (e) => {
-        const index = e.target.dataset.index;
-        const val = e.target.value;
-
-        if (e.target.classList.contains('name-input')) {
-            course.components[index].name = val;
-        } else if (e.target.classList.contains('marks-input')) {
-            course.components[index].obtained = val === '' ? null : Number(val);
-        } else if (e.target.classList.contains('date-input')) {
-            course.components[index].date = val;
-        } else if (e.target.classList.contains('max-marks-input')) {
-            course.components[index].max = Number(val);
-            course.totalMarks = course.components.reduce((sum, c) => sum + Number(c.max), 0);
-        }
-        
-        Storage.save(courses);
-        updateStats();
-    });
+  updateCourseStats(course);
 }
+
+function addEvaluative() {
+  const params = new URLSearchParams(window.location.search);
+  const id = Number(params.get("id"));
+  const data = loadData();
+  const course = data.courses.find(c => c.id === id);
+
+  course.evaluatives.push({
+    name: "New Evaluative",
+    date: "",
+    max: 0,
+    obtained: 0
+  });
+
+  saveData(data);
+  renderCourse();
+}
+
+function clearEvaluatives() {
+  const params = new URLSearchParams(window.location.search);
+  const id = Number(params.get("id"));
+  const data = loadData();
+  const course = data.courses.find(c => c.id === id);
+
+  course.evaluatives = [];
+  saveData(data);
+  renderCourse();
+}
+
+function updateCourseStats(course) {
+  const totalObtained = course.evaluatives.reduce(
+    (s, e) => s + (Number(e.obtained) || 0),
+    0
+  );
+
+  document.getElementById("totalObtained").innerText =
+    `${totalObtained} / ${course.totalMarks}`;
+
+  document.getElementById("totalPercent").innerText =
+    ((totalObtained / course.totalMarks) * 100 || 0).toFixed(1) + "%";
+
+  const finished = course.evaluatives.filter(
+    e => e.date && e.date < todayISO()
+  );
+
+  if (finished.length === 0) {
+    document.getElementById("currentEval").innerText = "N/A";
+    document.getElementById("currentPercent").innerText = "N/A";
+    return;
+  }
+
+  const max = finished.reduce((s, e) => s + (Number(e.max) || 0), 0);
+  const got = finished.reduce((s, e) => s + (Number(e.obtained) || 0), 0);
+
+  document.getElementById("currentEval").innerText = `${got} / ${max}`;
+  document.getElementById("currentPercent").innerText =
+    ((got / max) * 100 || 0).toFixed(1) + "%";
+}
+
+/**********************************************************
+ * CALENDAR LOGIC (calendar.html)
+ **********************************************************/
+function renderCalendar(year, month) {
+  const grid = document.getElementById("calendarGrid");
+  if (!grid) return;
+
+  grid.innerHTML = "";
+
+  const data = loadData();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  for (let i = 0; i < firstDay; i++) {
+    grid.appendChild(document.createElement("div"));
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const cell = document.createElement("div");
+    cell.className = "calendar-day";
+
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    cell.innerHTML = `<span class="day-num">${day}</span>`;
+
+    data.courses.forEach(course => {
+      course.evaluatives.forEach(ev => {
+        if (ev.date === dateStr) {
+          const pill = document.createElement("div");
+          pill.className = "calendar-pill";
+          pill.textContent = ev.name;
+          pill.onclick = () => {
+            window.location.href = `course.html?id=${course.id}`;
+          };
+          cell.appendChild(pill);
+        }
+      });
+    });
+
+    grid.appendChild(cell);
+  }
+}
+
+/**********************************************************
+ * BOOTSTRAP
+ **********************************************************/
+document.addEventListener("DOMContentLoaded", () => {
+  renderHome();
+  renderCourse();
+});
