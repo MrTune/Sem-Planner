@@ -88,5 +88,94 @@
     updateCalendar();
   </script>
 
+  /* ================================
+   CALENDAR PAGE STYLES
+================================ */
+
+.calendar-container {
+  max-width: 1100px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.calendar-header h2 {
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.calendar-header button {
+  background: #f1f3f5;
+  border: none;
+  padding: 0.4rem 0.8rem;
+  font-size: 1rem;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.calendar-header button:hover {
+  background: #e5e7eb;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 0.5rem;
+  color: #555;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.5rem;
+}
+
+.calendar-day {
+  min-height: 110px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.4rem;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.calendar-day .day-num {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 0.25rem;
+}
+
+.calendar-pill {
+  background: #eef2ff;
+  color: #1e3a8a;
+  padding: 0.2rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.calendar-pill:hover {
+  background: #e0e7ff;
+}
+
+/* Empty filler cells (before first day) */
+.calendar-grid > div:empty {
+  border: none;
+  background: transparent;
+}
+
+
 </body>
 </html>
